@@ -5,6 +5,7 @@
 
 import { BehaviorSubject } from 'rxjs';
 import { CoreSetup, CoreStart, Plugin, PluginInitializerContext } from 'src/core/public';
+import { UiActionsStart } from 'src/plugins/ui_actions/public';
 import { IStorageWrapper } from '../../../opensearch_dashboards_utils/public';
 import { ConfigSchema } from '../../config';
 import { DataPublicPluginStart } from '../types';
@@ -23,6 +24,7 @@ export interface UiServiceSetupDependencies {}
 export interface UiServiceStartDependencies {
   dataServices: Omit<DataPublicPluginStart, 'ui'>;
   storage: IStorageWrapper;
+  uiActions: UiActionsStart;
 }
 
 export class UiService implements Plugin<IUiSetup, IUiStart> {
@@ -54,7 +56,10 @@ export class UiService implements Plugin<IUiSetup, IUiStart> {
     };
   }
 
-  public start(core: CoreStart, { dataServices, storage }: UiServiceStartDependencies): IUiStart {
+  public start(
+    core: CoreStart,
+    { dataServices, storage, uiActions }: UiServiceStartDependencies
+  ): IUiStart {
     const Settings = createSettings({
       config: this.enhancementsConfig,
       search: dataServices.search,

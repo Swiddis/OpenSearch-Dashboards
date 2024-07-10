@@ -27,11 +27,14 @@ import {
   useOpenSearchDashboards,
   withOpenSearchDashboards,
 } from '../../../../opensearch_dashboards_react/public';
-import { UI_SETTINGS } from '../../../common';
+import { ASYNC_ACTION_ID, ASYNC_TRIGGER_ID, UI_SETTINGS } from '../../../common';
 import { fromUser, getQueryLog, PersistedLog } from '../../query';
 import { Settings } from '../types';
 import { NoDataPopover } from './no_data_popover';
 import QueryEditorUI from './query_editor';
+import { UiServiceStartDependencies } from '../ui_service';
+import { createAction } from 'src/plugins/ui_actions/public';
+import { ActionContext } from 'src/plugins/ui_actions/public/actions';
 
 const QueryEditor = withOpenSearchDashboards(QueryEditorUI);
 
@@ -74,6 +77,9 @@ export default function QueryEditorTopRow(props: QueryEditorTopRowProps) {
 
   const opensearchDashboards = useOpenSearchDashboards<IDataPluginServices>();
   const { uiSettings, storage, appName } = opensearchDashboards.services;
+
+  const uiServices = useOpenSearchDashboards<UiServiceStartDependencies>();
+  const { uiActions } = uiServices.services;
 
   const isDataSourceReadOnly = uiSettings.get(UI_SETTINGS.QUERY_DATA_SOURCE_READONLY);
 
@@ -284,16 +290,32 @@ export default function QueryEditorTopRow(props: QueryEditorTopRowProps) {
   }
 
   function renderUpdateButton() {
+    const [progress, setProgress] = useState('None');
+    if (uiActions) {
+      const asyncQueryProgressAction = createAction<typeof ASYNC_ACTION_ID>({
+        execute: async (context: ActionContext<any>) => {
+          console.log('Received context:', context);
+          setProgress(context.query_status);
+        },
+        id: ASYNC_ACTION_ID,
+      });
+      uiActions.addTriggerAction(ASYNC_TRIGGER_ID, asyncQueryProgressAction);
+    } else {
+      console.log('No uiActions');
+    }
     const button = props.customSubmitButton ? (
       React.cloneElement(props.customSubmitButton, { onClick: onClickSubmitButton })
     ) : (
-      <EuiSuperUpdateButton
-        needsUpdate={props.isDirty}
-        isDisabled={isDateRangeInvalid}
-        isLoading={props.isLoading}
-        onClick={onClickSubmitButton}
-        data-test-subj="querySubmitButton"
-      />
+      <>
+        <p>{progress}</p>
+        <EuiSuperUpdateButton
+          needsUpdate={props.isDirty}
+          isDisabled={isDateRangeInvalid}
+          isLoading={props.isLoading}
+          onClick={onClickSubmitButton}
+          data-test-subj="querySubmitButton"
+        />
+      </>
     );
 
     if (!shouldRenderDatePicker()) {

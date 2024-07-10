@@ -28,6 +28,8 @@
  * under the License.
  */
 
+export const ASYNC_TRIGGER_ID = 'async_query_status_trigger';
+export const ASYNC_ACTION_ID = 'progress_bar_action_id';
 export const DEFAULT_QUERY_LANGUAGE = 'kuery';
 
 export const UI_SETTINGS = {

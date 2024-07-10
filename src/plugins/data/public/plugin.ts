@@ -93,12 +93,18 @@ import { DataSourceFactory } from './data_sources/datasource';
 import { registerDefaultDataSource } from './data_sources/register_default_datasource';
 import { DefaultDslDataSource } from './data_sources/default_datasource';
 import { DEFAULT_DATA_SOURCE_TYPE } from './data_sources/constants';
+import { ASYNC_ACTION_ID, ASYNC_TRIGGER_ID } from '../common';
 
 declare module '../../ui_actions/public' {
+  export interface TriggerContextMapping {
+    [ASYNC_TRIGGER_ID]: unknown;
+  }
+
   export interface ActionContextMapping {
     [ACTION_GLOBAL_APPLY_FILTER]: ApplyGlobalFilterActionContext;
     [ACTION_SELECT_RANGE]: SelectRangeActionContext;
     [ACTION_VALUE_CLICK]: ValueClickActionContext;
+    [ASYNC_ACTION_ID]: unknown;
   }
 }
 
