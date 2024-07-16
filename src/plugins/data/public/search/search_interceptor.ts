@@ -45,6 +45,7 @@ import {
 import { SearchUsageCollector } from './collectors';
 import { SearchTimeoutError, PainlessError, isPainlessError } from './errors';
 import { toMountPoint } from '../../../opensearch_dashboards_react/public';
+import { UiActionsStart } from 'src/plugins/ui_actions/public';
 
 export interface SearchInterceptorDeps {
   http: CoreSetup['http'];
@@ -52,6 +53,7 @@ export interface SearchInterceptorDeps {
   startServices: Promise<[CoreStart, any, unknown]>;
   toasts: ToastsSetup;
   usageCollector?: SearchUsageCollector;
+  uiActions: UiActionsStart;
 }
 
 export class SearchInterceptor {

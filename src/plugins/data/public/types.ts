@@ -34,13 +34,14 @@ import { ExpressionsSetup } from 'src/plugins/expressions/public';
 import { UiActionsSetup, UiActionsStart } from 'src/plugins/ui_actions/public';
 import { AutocompleteSetup, AutocompleteStart } from './autocomplete';
 import { FieldFormatsSetup, FieldFormatsStart } from './field_formats';
-import { createFiltersFromRangeSelectAction, createFiltersFromValueClickAction } from './actions';
+import { AsyncQueryContext, createFiltersFromRangeSelectAction, createFiltersFromValueClickAction } from './actions';
 import { ISearchSetup, ISearchStart, SearchEnhancements } from './search';
 import { QuerySetup, QueryStart } from './query';
 import { IndexPatternsContract } from './index_patterns';
 import { UsageCollectionSetup } from '../../usage_collection/public';
 import { DataSourceStart } from './data_sources/datasource_services/types';
 import { IUiStart, UiEnhancements } from './ui';
+import { Subject } from 'rxjs';
 
 export interface DataPublicPluginEnhancements {
   search?: SearchEnhancements;
@@ -123,6 +124,10 @@ export interface DataPublicPluginStart {
    * {@link DataSourceStart}
    */
   dataSources: DataSourceStart;
+  /**
+   * Subscribable subject that allows retrieving query progress
+   */
+  progressSubject: Subject<AsyncQueryContext>;
 }
 
 export interface IDataPluginServices extends Partial<CoreStart> {

@@ -37,3 +37,4 @@ export { createFiltersFromValueClickAction } from './filters/create_filters_from
 export { createFiltersFromRangeSelectAction } from './filters/create_filters_from_range_select';
 export * from './select_range_action';
 export * from './value_click_action';
+export * from './query_progress_action';

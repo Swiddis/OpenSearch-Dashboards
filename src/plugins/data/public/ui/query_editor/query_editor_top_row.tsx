@@ -7,6 +7,7 @@ import {
   EuiFieldText,
   EuiFlexGroup,
   EuiFlexItem,
+  EuiProgress,
   EuiSuperDatePicker,
   EuiSuperUpdateButton,
   OnRefreshProps,
@@ -27,14 +28,11 @@ import {
   useOpenSearchDashboards,
   withOpenSearchDashboards,
 } from '../../../../opensearch_dashboards_react/public';
-import { ASYNC_ACTION_ID, ASYNC_TRIGGER_ID, UI_SETTINGS } from '../../../common';
+import { UI_SETTINGS } from '../../../common';
 import { fromUser, getQueryLog, PersistedLog } from '../../query';
 import { Settings } from '../types';
 import { NoDataPopover } from './no_data_popover';
 import QueryEditorUI from './query_editor';
-import { UiServiceStartDependencies } from '../ui_service';
-import { createAction } from 'src/plugins/ui_actions/public';
-import { ActionContext } from 'src/plugins/ui_actions/public/actions';
 
 const QueryEditor = withOpenSearchDashboards(QueryEditorUI);
 
@@ -76,10 +74,7 @@ export default function QueryEditorTopRow(props: QueryEditorTopRowProps) {
   const [isQueryEditorFocused, setIsQueryEditorFocused] = useState(false);
 
   const opensearchDashboards = useOpenSearchDashboards<IDataPluginServices>();
-  const { uiSettings, storage, appName } = opensearchDashboards.services;
-
-  const uiServices = useOpenSearchDashboards<UiServiceStartDependencies>();
-  const { uiActions } = uiServices.services;
+  const { uiSettings, storage, appName, data } = opensearchDashboards.services;
 
   const isDataSourceReadOnly = uiSettings.get(UI_SETTINGS.QUERY_DATA_SOURCE_READONLY);
 
@@ -289,33 +284,57 @@ export default function QueryEditorTopRow(props: QueryEditorTopRowProps) {
     );
   }
 
-  function renderUpdateButton() {
-    const [progress, setProgress] = useState('None');
-    if (uiActions) {
-      const asyncQueryProgressAction = createAction<typeof ASYNC_ACTION_ID>({
-        execute: async (context: ActionContext<any>) => {
-          console.log('Received context:', context);
-          setProgress(context.query_status);
-        },
-        id: ASYNC_ACTION_ID,
-      });
-      uiActions.addTriggerAction(ASYNC_TRIGGER_ID, asyncQueryProgressAction);
-    } else {
-      console.log('No uiActions');
+  function renderProgressBar() {
+    const states: { [key: string]: number } = {
+      NONE: 0,
+      SUBMITTED: 1,
+      WAITING: 2,
+      SCHEDULED: 3,
+      RUNNING: 4,
+      SUCCESS: 5,
+      FAILED: 5,
+      CANCELLING: 4,
+      CANCELLED: 5,
+    };
+    const [progress, setProgress] = useState('NONE');
+    data.progressSubject.subscribe((v) => setProgress(v.queryStatus));
+
+    // Progress is only applicable for async queries that have started running
+    if (!queryLanguage?.toLowerCase().includes('async') || progress === 'NONE') {
+      return null;
     }
+
+    let progressValue: number = progress in states ? states[progress] : 5;
+    let color = 'success';
+    if (progress === 'FAILED') color = 'danger';
+    if (progress === 'CANCELLED' || !(progress in states)) color = 'warning';
+
+    return (
+      <EuiFlexGroup>
+        <EuiFlexItem style={{ padding: '10px' }} grow={false}>
+          <EuiProgress
+            style={{ width: '60px', height: '20px' }}
+            color={color}
+            value={progressValue}
+            max={5}
+            size="l"
+          />
+        </EuiFlexItem>
+      </EuiFlexGroup>
+    );
+  }
+
+  function renderUpdateButton() {
     const button = props.customSubmitButton ? (
       React.cloneElement(props.customSubmitButton, { onClick: onClickSubmitButton })
     ) : (
-      <>
-        <p>{progress}</p>
-        <EuiSuperUpdateButton
-          needsUpdate={props.isDirty}
-          isDisabled={isDateRangeInvalid}
-          isLoading={props.isLoading}
-          onClick={onClickSubmitButton}
-          data-test-subj="querySubmitButton"
-        />
-      </>
+      <EuiSuperUpdateButton
+        needsUpdate={props.isDirty}
+        isDisabled={isDateRangeInvalid}
+        isLoading={props.isLoading}
+        onClick={onClickSubmitButton}
+        data-test-subj="querySubmitButton"
+      />
     );
 
     if (!shouldRenderDatePicker()) {
@@ -402,6 +421,7 @@ export default function QueryEditorTopRow(props: QueryEditorTopRowProps) {
         <EuiFlexGroup responsive={false} gutterSize="none">
           <EuiFlexItem grow={false}>{props.filterBar}</EuiFlexItem>
           <EuiFlexItem>{renderSharingMetaFields()}</EuiFlexItem>
+          <EuiFlexItem grow={false}>{renderProgressBar()}</EuiFlexItem>
           <EuiFlexItem grow={false}>{renderUpdateButton()}</EuiFlexItem>
         </EuiFlexGroup>
       </EuiFlexItem>

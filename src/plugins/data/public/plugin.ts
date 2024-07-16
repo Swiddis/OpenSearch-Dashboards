@@ -94,6 +94,7 @@ import { registerDefaultDataSource } from './data_sources/register_default_datas
 import { DefaultDslDataSource } from './data_sources/default_datasource';
 import { DEFAULT_DATA_SOURCE_TYPE } from './data_sources/constants';
 import { ASYNC_ACTION_ID, ASYNC_TRIGGER_ID } from '../common';
+import { createQueryProgressSubject } from './actions/query_progress_action';
 
 declare module '../../ui_actions/public' {
   export interface TriggerContextMapping {
@@ -224,6 +225,8 @@ export class DataPublicPlugin
     const search = this.searchService.start(core, { fieldFormats, indexPatterns });
     setSearchService(search);
 
+    const progressSubject = createQueryProgressSubject(uiActions);
+
     uiActions.addTriggerAction(
       APPLY_FILTER_TRIGGER,
       uiActions.getAction(ACTION_GLOBAL_APPLY_FILTER)
@@ -254,11 +257,16 @@ export class DataPublicPlugin
         dataSourceService,
         dataSourceFactory,
       },
+      progressSubject,
     };
 
     registerDefaultDataSource(dataServices);
 
-    const uiService = this.uiService.start(core, { dataServices, storage: this.storage });
+    const uiService = this.uiService.start(core, {
+      dataServices,
+      storage: this.storage,
+      uiActions,
+    });
     setUiService(uiService);
 
     return {
