@@ -28,6 +28,7 @@ export interface DirectQuerySyncInfo {
   refreshInterval: number | null;
   lastRefreshTime: number | null;
   mappingName: string | null;
+  indexState: string | null;
   mdsId?: string;
 }
 
@@ -92,7 +93,7 @@ export async function fetchDirectQuerySyncInfo({
       const indexPattern = await savedObjectsClient.get('index-pattern', selectedIndexPatternId);
       const dataSourceRef = indexPattern.references.find((ref) => ref.type === 'data-source');
       localMdsId = dataSourceRef?.id; // Can be undefined if no data-source reference
-      indexTitle = indexPattern.attributes.title || null;
+      indexTitle = (indexPattern.attributes as { title?: string }).title || null;
     } else if (uniqueIndexPatternIds.length === 0) {
       localMdsId = undefined;
       return null;
@@ -115,7 +116,7 @@ export async function fetchDirectQuerySyncInfo({
     }
 
     // Step 5: Extract index parts, refresh interval, last refresh time, and name
-    const { parts, refreshInterval, lastRefreshTime, mappingName } = extractIndexInfo(
+    const { parts, refreshInterval, lastRefreshTime, mappingName, indexState } = extractIndexInfo(
       localMapping,
       resolvedIndex
     );
@@ -127,7 +128,14 @@ export async function fetchDirectQuerySyncInfo({
     // Step 6: Generate the refresh query
     const refreshQuery = generateRefreshQuery(parts);
 
-    return { refreshQuery, refreshInterval, lastRefreshTime, mappingName, mdsId: localMdsId };
+    return {
+      refreshQuery,
+      refreshInterval,
+      lastRefreshTime,
+      mappingName,
+      indexState,
+      mdsId: localMdsId,
+    };
   } catch (err) {
     onError('Failed to fetch dashboard information');
     return null;
@@ -180,18 +188,26 @@ export function extractIndexInfo(
   refreshInterval: number | null;
   lastRefreshTime: number | null;
   mappingName: string | null;
+  indexState: string | null;
 } {
   const mappingValues = Object.values(mapping)[0] as any;
   if (!mappingValues) {
-    return { parts: null, refreshInterval: null, lastRefreshTime: null, mappingName: null };
+    return {
+      parts: null,
+      refreshInterval: null,
+      lastRefreshTime: null,
+      mappingName: null,
+      indexState: null,
+    };
   }
 
   const mappingName = mappingValues?.mappings?._meta?.name ?? null;
   const refreshInterval = mappingValues?.mappings?._meta?.properties?.refreshInterval ?? null;
   const lastRefreshTime = mappingValues?.mappings?._meta?.properties?.lastRefreshTime ?? null;
+  const indexState = mappingValues?.mappings?._meta?.properties?.indexState ?? null;
 
   const parts = extractIndexParts(mappingName, concreteTitle);
-  return { parts, refreshInterval, lastRefreshTime, mappingName };
+  return { parts, refreshInterval, lastRefreshTime, mappingName, indexState };
 }
 
 export function extractIndexParts(
