@@ -3,7 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from 'react';
 import { i18n } from '@osd/i18n';
 import { FormattedMessage, I18nProvider } from '@osd/i18n/react';
 import { BrowserRouter as Router } from 'react-router-dom';
@@ -21,6 +28,7 @@ import {
   EuiComboBox,
   EuiFormRow,
   EuiFieldText,
+  EuiConfirmModal,
 } from '@elastic/eui';
 import { extname } from 'path';
 import {
@@ -59,22 +67,38 @@ export interface DataImporterPluginAppProps {
   dataSourceEnabled: boolean;
   dataSourceManagement?: DataSourceManagementPluginSetup;
   embedded?: boolean; // When true, skip Router, nav, and page wrappers
+  /**
+   * Called when the host (modal/flyout) should actually close. Hosts must route every
+   * close affordance (X, Escape, Done) through {@link DataImporterHandle.requestClose}
+   * so un-imported input is guarded by a discard confirmation.
+   */
+  onClose?: () => void;
+}
+
+/** Imperative handle exposed to hosts that embed the importer in a closable container. */
+export interface DataImporterHandle {
+  /** Closes via `onClose`, or asks for confirmation first if there is un-imported input. */
+  requestClose: () => void;
 }
 
 const ROWS_COUNT = 10;
 
-export const DataImporterPluginApp = ({
-  basename,
-  notifications,
-  http,
-  navigation,
-  config,
-  savedObjects,
-  dataSourceEnabled,
-  hideLocalCluster,
-  dataSourceManagement,
-  embedded = false,
-}: DataImporterPluginAppProps) => {
+const DataImporterPluginAppComponent = (
+  {
+    basename,
+    notifications,
+    http,
+    navigation,
+    config,
+    savedObjects,
+    dataSourceEnabled,
+    hideLocalCluster,
+    dataSourceManagement,
+    embedded = false,
+    onClose,
+  }: DataImporterPluginAppProps,
+  ref: React.ForwardedRef<DataImporterHandle>
+) => {
   const [indexName, setIndexName] = useState<string>();
   const [importType, setImportType] = useState<ImportChoices>(IMPORT_CHOICE_FILE);
   const [disableImport, setDisableImport] = useState<boolean>();
@@ -97,6 +121,32 @@ export const DataImporterPluginApp = ({
   const [indexOptions, setIndexOptions] = useState<Array<{ label: string }>>([]);
   const [createMode, setCreateMode] = useState<boolean>(false);
   const [importIdentifier, setImportIdentifier] = useState<string>('');
+  // The exact input object (File, or text snapshot) that was last imported successfully.
+  // Dirty is derived by identity against the current input rather than toggled by hand, so
+  // attaching a new file (always a new File object) re-arms the guard automatically, and an
+  // in-flight import can only clear the input it actually submitted.
+  const [lastImportedInput, setLastImportedInput] = useState<File | string | undefined>();
+  const [isDiscardConfirmVisible, setIsDiscardConfirmVisible] = useState<boolean>(false);
+
+  const currentInput = importType === IMPORT_CHOICE_FILE ? inputFile : inputText;
+  const isDirty = !!currentInput && currentInput !== lastImportedInput;
+
+  const requestClose = useCallback(() => {
+    if (isDirty) {
+      setIsDiscardConfirmVisible(true);
+    } else {
+      onClose?.();
+    }
+  }, [isDirty, onClose]);
+
+  useImperativeHandle(ref, () => ({ requestClose }), [requestClose]);
+
+  const onDiscardCancel = () => setIsDiscardConfirmVisible(false);
+
+  const onDiscardConfirm = () => {
+    setIsDiscardConfirmVisible(false);
+    onClose?.();
+  };
 
   const onImportTypeChange = (type: ImportChoices) => {
     if (type === IMPORT_CHOICE_FILE) {
@@ -217,6 +267,8 @@ export const DataImporterPluginApp = ({
 
   const importData = async () => {
     let response: ImportResponse | undefined;
+    // Capture what is being submitted; the user may attach another file while this is in flight.
+    const submittedInput = currentInput;
 
     try {
       if (importType === IMPORT_CHOICE_FILE) {
@@ -257,6 +309,9 @@ export const DataImporterPluginApp = ({
     }
 
     if (response && response.success) {
+      // Only a fully successful import clears dirty. The flyout deliberately stays open so the
+      // user can attach and import another file (multi-file flow); closing is a separate action.
+      setLastImportedInput(submittedInput);
       notifications.toasts.addSuccess(
         i18n.translate('dataImporter.dataImported', {
           defaultMessage: `{total} documents successfully ingested into {indexName}`,
@@ -455,7 +510,12 @@ export const DataImporterPluginApp = ({
         {importType === IMPORT_CHOICE_FILE && (
           <>
             <EuiSpacer size="s" />
-            <EuiButton fullWidth={true} isDisabled={disableImport} onClick={previewData}>
+            <EuiButton
+              fullWidth={true}
+              isDisabled={disableImport}
+              onClick={previewData}
+              data-test-subj="dataImporterPreviewButton"
+            >
               {i18n.translate('dataImporter.previewButton', {
                 defaultMessage: 'Preview',
               })}
@@ -463,7 +523,13 @@ export const DataImporterPluginApp = ({
           </>
         )}
         <EuiSpacer size="s" />
-        <EuiButton fullWidth={true} isDisabled={disableImport} onClick={importData}>
+        <EuiButton
+          fill
+          fullWidth={true}
+          isDisabled={disableImport}
+          onClick={importData}
+          data-test-subj="dataImporterImportButton"
+        >
           {i18n.translate('dataImporter.importButton', {
             defaultMessage: 'Import',
           })}
@@ -498,9 +564,41 @@ export const DataImporterPluginApp = ({
     </EuiFlexGroup>
   );
 
+  const discardConfirmModal = isDiscardConfirmVisible && (
+    <EuiConfirmModal
+      title={
+        importType === IMPORT_CHOICE_FILE
+          ? i18n.translate('dataImporter.discardConfirm.fileTitle', {
+              defaultMessage: "You haven't imported this file. Discard?",
+            })
+          : i18n.translate('dataImporter.discardConfirm.textTitle', {
+              defaultMessage: "You haven't imported this data. Discard?",
+            })
+      }
+      onCancel={onDiscardCancel}
+      onConfirm={onDiscardConfirm}
+      cancelButtonText={i18n.translate('dataImporter.discardConfirm.cancel', {
+        defaultMessage: 'Cancel',
+      })}
+      confirmButtonText={i18n.translate('dataImporter.discardConfirm.confirm', {
+        defaultMessage: 'Discard',
+      })}
+      buttonColor="danger"
+      defaultFocusedButton="cancel"
+      data-test-subj="dataImporterDiscardConfirmModal"
+    />
+  );
+
   // Return embedded or full app version
   if (embedded) {
-    return <I18nProvider>{importerContent}</I18nProvider>;
+    return (
+      <I18nProvider>
+        <>
+          {importerContent}
+          {discardConfirmModal}
+        </>
+      </I18nProvider>
+    );
   }
 
   return (
@@ -527,3 +625,6 @@ export const DataImporterPluginApp = ({
     </Router>
   );
 };
+
+export const DataImporterPluginApp = forwardRef(DataImporterPluginAppComponent);
+DataImporterPluginApp.displayName = 'DataImporterPluginApp';
