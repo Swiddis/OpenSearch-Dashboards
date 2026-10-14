@@ -4,6 +4,7 @@
  */
 
 import { Readable } from 'stream';
+import { MappingTypeMapping } from '@opensearch-project/opensearch/api/types';
 import { OpenSearchClient } from '../../../core/server';
 
 export interface DataImporterPluginSetup {
@@ -48,6 +49,12 @@ export interface IngestOptions {
    * Field name to use for the lookup identifier (typically '__lookup')
    */
   lookupField?: string;
+
+  /**
+   * Resolved mapping of the target index, if known. Used to coerce numbers/booleans to strings for
+   * fields declared as text/keyword; undeclared fields are passed through unchanged.
+   */
+  mapping?: MappingTypeMapping;
 }
 
 /**

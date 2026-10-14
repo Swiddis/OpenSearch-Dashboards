@@ -44,6 +44,9 @@ describe('Import text route', () => {
         exists: jest.fn().mockResolvedValue({ body: false }),
         create: jest.fn().mockResolvedValue({}),
         updateAliases: jest.fn().mockResolvedValue({}),
+        getMapping: jest.fn().mockResolvedValue({
+          body: { 'test-index': { mappings: { properties: { zip: { type: 'keyword' } } } } },
+        }),
       },
     };
 
@@ -241,7 +244,7 @@ describe('Import text route', () => {
     });
   });
 
-  const runImport = async (query: Record<string, unknown> = {}) => {
+  const runImport = async (query: Record<string, unknown> = {}, mapping?: string) => {
     importTextRoute(router, config, fileProcessors, false);
     const request = {
       query: {
@@ -253,6 +256,7 @@ describe('Import text route', () => {
       },
       body: {
         text: '{"name": "test"}',
+        ...(mapping && { mapping }),
       },
     };
     const response = {
@@ -349,6 +353,42 @@ describe('Import text route', () => {
     expect(mockClient.indices.updateAliases).not.toHaveBeenCalled();
     expect(response.ok).toHaveBeenCalledWith({
       body: { message: partialFailure, success: false, partial: true },
+    });
+  });
+
+  describe('target mapping for type coercion', () => {
+    it('should pass the create-mode mapping (incl. __lookup) to the processor', async () => {
+      await runImport({}, JSON.stringify({ properties: { zip: { type: 'keyword' } } }));
+
+      expect(mockClient.indices.getMapping).not.toHaveBeenCalled();
+      expect(mockProcessor.ingestText.mock.calls[0][1].mapping).toEqual({
+        properties: { zip: { type: 'keyword' }, __lookup: { type: 'keyword' } },
+      });
+    });
+
+    it('should fetch and pass the existing index mapping when not in create mode', async () => {
+      mockClient.indices.exists.mockResolvedValue({ body: true });
+
+      await runImport({ createMode: false });
+
+      expect(mockClient.indices.getMapping).toHaveBeenCalledWith({ index: 'test-index' });
+      expect(mockProcessor.ingestText.mock.calls[0][1].mapping).toEqual({
+        properties: { zip: { type: 'keyword' } },
+      });
+    });
+
+    it('should continue without coercion and log when the mapping fetch fails', async () => {
+      mockClient.indices.exists.mockResolvedValue({ body: true });
+      mockClient.indices.getMapping.mockRejectedValue(new Error('security_exception'));
+
+      const response = await runImport({ createMode: false });
+
+      expect(mockProcessor.ingestText).toHaveBeenCalled();
+      expect(mockProcessor.ingestText.mock.calls[0][1].mapping).toBeUndefined();
+      expect(response.ok).toHaveBeenCalled();
+      expect(context.dataImporter.logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch mapping for test-index')
+      );
     });
   });
 

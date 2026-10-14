@@ -5,13 +5,12 @@
 
 import { IRouter } from 'src/core/server';
 import { schema, TypeOf } from '@osd/config-schema';
-import _ from 'lodash';
 import { FileProcessorService } from '../processors/file_processor_service';
 import { configSchema } from '../../config';
 import { CSV_SUPPORTED_DELIMITERS } from '../../common/constants';
-import { decideClient, fetchDepthLimit, mergeCustomizerForPreview } from '../utils/util';
+import { decideClient, fetchDepthLimit } from '../utils/util';
 import { FileStream } from '../types';
-import { determineMapping } from '../utils/determine_mapping';
+import { determineMappingFromDocuments } from '../utils/determine_mapping';
 
 export function previewRoute(
   router: IRouter,
@@ -107,11 +106,9 @@ export function previewRoute(
       try {
         // Ensure OpenSearch can handle deep objects
         const nestedObjectsLimit = await fetchDepthLimit(client);
-        // Some documents may omit fields so we must merge into one large document
-        const predictedMapping = determineMapping(
-          _.mergeWith(documents, mergeCustomizerForPreview),
-          nestedObjectsLimit
-        );
+        // Infer across every preview row (some documents may omit fields, and a column's type can
+        // differ between rows), widening conflicting types instead of taking the first row's type
+        const predictedMapping = determineMappingFromDocuments(documents, nestedObjectsLimit);
 
         const existingMapping = !request.query.createMode
           ? (await client.indices.getMapping({ index: request.query.indexName })).body[

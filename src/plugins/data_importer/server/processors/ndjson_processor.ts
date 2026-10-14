@@ -10,6 +10,7 @@ import { isValidObject } from '../utils/util';
 import {
   applyBackpressure,
   BulkIngester,
+  BULK_CHUNK_SIZE,
   INVALID_ROW_ERROR_REASON,
   INVALID_ROW_ERROR_TYPE,
   PARSE_ERROR_TYPE,
@@ -38,13 +39,13 @@ export class NDJSONProcessor implements IFileProcessor {
   }
 
   public async ingestText(text: string, options: IngestOptions) {
-    const { client, indexName, lookupId, lookupField } = options;
+    const { client, indexName, lookupId, lookupField, mapping } = options;
     const stringStream = new Readable();
     stringStream._read = () => {};
     stringStream.push(text);
     stringStream.push(null);
 
-    const ingester = new BulkIngester(client, indexName);
+    const ingester = new BulkIngester(client, indexName, BULK_CHUNK_SIZE, mapping);
     const numDocuments = await new Promise<number>((promise) => {
       let numDocumentsCount = 0;
 
@@ -69,9 +70,9 @@ export class NDJSONProcessor implements IFileProcessor {
   }
 
   public async ingestFile(file: Readable, options: IngestOptions) {
-    const { client, indexName, lookupId, lookupField } = options;
+    const { client, indexName, lookupId, lookupField, mapping } = options;
 
-    const ingester = new BulkIngester(client, indexName);
+    const ingester = new BulkIngester(client, indexName, BULK_CHUNK_SIZE, mapping);
     const numDocuments = await new Promise<number>((resolve, reject) => {
       let numDocumentsCount = 0;
 

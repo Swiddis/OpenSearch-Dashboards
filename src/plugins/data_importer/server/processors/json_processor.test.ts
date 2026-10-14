@@ -148,6 +148,20 @@ describe('JSONProcessor', () => {
       ]);
     });
 
+    it('should stringify numbers going into keyword fields of the target mapping', async () => {
+      const response = await processor.ingestFile(
+        Readable.from([JSON.stringify({ zip: 2134, age: 30 })]),
+        {
+          client: clientMock,
+          indexName: 'foo',
+          mapping: { properties: { zip: { type: 'keyword' }, age: { type: 'integer' } } },
+        }
+      );
+
+      expect(response.failedRows).toEqual([]);
+      expect(bulkDocs(clientMock)).toEqual([{ zip: '2134', age: 30 }]);
+    });
+
     it('should inject lookup field when lookupId and lookupField are provided', async () => {
       const lookupId = 'test-lookup-id';
       const lookupField = '__lookup';

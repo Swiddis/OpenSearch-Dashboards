@@ -8,6 +8,7 @@ import { IFileProcessor, IngestOptions, ParseOptions, ValidationOptions } from '
 import { isValidObject } from '../utils/util';
 import {
   BulkIngester,
+  BULK_CHUNK_SIZE,
   INVALID_ROW_ERROR_REASON,
   INVALID_ROW_ERROR_TYPE,
   PARSE_ERROR_TYPE,
@@ -27,21 +28,21 @@ export class JSONProcessor implements IFileProcessor {
   }
 
   public async ingestText(text: string, options: IngestOptions) {
-    const { client, indexName, lookupId, lookupField } = options;
+    const { client, indexName, lookupId, lookupField, mapping } = options;
     const document = JSON.parse(text);
 
     // Inject lookup field if provided
     const doc = lookupId && lookupField ? { ...document, [lookupField]: lookupId } : document;
 
-    const ingester = new BulkIngester(client, indexName);
+    const ingester = new BulkIngester(client, indexName, BULK_CHUNK_SIZE, mapping);
     await ingester.add(1, doc);
     return await ingester.finish(1);
   }
 
   public async ingestFile(file: Readable, options: IngestOptions) {
-    const { client, indexName, lookupId, lookupField } = options;
+    const { client, indexName, lookupId, lookupField, mapping } = options;
 
-    const ingester = new BulkIngester(client, indexName);
+    const ingester = new BulkIngester(client, indexName, BULK_CHUNK_SIZE, mapping);
     await new Promise<void>((resolve) => {
       let rawData = '';
       file

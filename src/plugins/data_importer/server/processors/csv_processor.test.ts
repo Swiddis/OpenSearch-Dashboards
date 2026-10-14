@@ -164,6 +164,25 @@ describe('CSVProcessor', () => {
       mockBulk(clientMock);
     });
 
+    it('should pass the target mapping through and keep int-like cells as strings for keyword fields', async () => {
+      // CSV cells are already strings; with a keyword target they must stay strings (not be parsed)
+      const response = await processor.ingestFile(
+        Readable.from(['zip,n\n', '02134,1\n', '123,2']),
+        {
+          client: clientMock,
+          indexName: 'foo',
+          delimiter: ',',
+          mapping: { properties: { zip: { type: 'keyword' }, n: { type: 'integer' } } },
+        }
+      );
+
+      expect(response.failedRows).toEqual([]);
+      expect(bulkDocs(clientMock)).toEqual([
+        { zip: '02134', n: '1' },
+        { zip: '123', n: '2' },
+      ]);
+    });
+
     it('should require a delimiter', async () => {
       await expect(
         processor.ingestFile(Readable.from(['a\n1']), { client: clientMock, indexName: 'foo' })

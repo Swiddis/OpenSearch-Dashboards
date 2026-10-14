@@ -225,6 +225,40 @@ describe('BulkIngester', () => {
     ]);
   });
 
+  it('coerces numbers/booleans to strings for fields the target mapping declares as strings', async () => {
+    client.bulk.mockResolvedValue(bulkResponse([ok()]));
+
+    const ingester = new BulkIngester(client, 'foo', 10, {
+      properties: {
+        zip: { type: 'keyword' },
+        age: { type: 'integer' },
+        host: { properties: { zone: { type: 'text' } } },
+      },
+    });
+    await ingester.add(1, { zip: 2134, age: 30, host: { zone: 7 }, undeclared: 5 });
+    await ingester.finish(1);
+
+    expect(client.bulk.mock.calls[0][0]).toEqual({
+      body: [
+        { index: { _index: 'foo' } },
+        // zip + host.zone stringified; numeric target and undeclared fields untouched
+        { zip: '2134', age: 30, host: { zone: '7' }, undeclared: 5 },
+      ],
+    });
+  });
+
+  it('sends documents unchanged when no mapping is given', async () => {
+    client.bulk.mockResolvedValue(bulkResponse([ok()]));
+
+    const ingester = new BulkIngester(client, 'foo', 10);
+    await ingester.add(1, { zip: 2134 });
+    await ingester.finish(1);
+
+    expect(client.bulk.mock.calls[0][0]).toEqual({
+      body: [{ index: { _index: 'foo' } }, { zip: 2134 }],
+    });
+  });
+
   it('does not call _bulk at all when there are no documents', async () => {
     const ingester = new BulkIngester(client, 'foo', 10);
     const result = await ingester.finish(0);

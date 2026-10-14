@@ -4,8 +4,10 @@
  */
 
 import { Readable } from 'stream';
+import { MappingTypeMapping } from '@opensearch-project/opensearch/api/types';
 import { OpenSearchClient } from '../../../../core/server';
 import { IngestErrorSummary, IngestResponse } from '../types';
+import { coerceToStringFields, getStringFieldPaths } from './coerce_to_mapping';
 
 /**
  * Number of documents per `_bulk` request. Bounds both request size and in-flight work, replacing
@@ -147,12 +149,23 @@ export class BulkIngester {
    * request is ever in flight.
    */
   private inFlight: Promise<void> = Promise.resolve();
+  /**
+   * Dotted paths the target mapping declares as string types; values there are stringified
+   */
+  private readonly stringFields: Set<string>;
 
+  /**
+   * @param mapping resolved target index mapping; when given, numbers/booleans bound for
+   *   text/keyword fields are sent as strings. Omit to send documents unchanged.
+   */
   constructor(
     private readonly client: OpenSearchClient,
     private readonly indexName: string,
-    private readonly chunkSize: number = BULK_CHUNK_SIZE
-  ) {}
+    private readonly chunkSize: number = BULK_CHUNK_SIZE,
+    mapping?: MappingTypeMapping
+  ) {
+    this.stringFields = getStringFieldPaths(mapping);
+  }
 
   /**
    * Queue a document. When the buffer reaches the chunk size a flush is scheduled and a promise is
@@ -160,7 +173,7 @@ export class BulkIngester {
    * apply backpressure. Returns undefined when no flush was triggered.
    */
   public add(row: number, document: Record<string, unknown>): Promise<void> | undefined {
-    this.buffer.push({ row, document });
+    this.buffer.push({ row, document: coerceToStringFields(document, this.stringFields) });
     if (this.buffer.length >= this.chunkSize) {
       return this.flush();
     }

@@ -16,6 +16,7 @@ import { isValidObject } from '../utils/util';
 import {
   applyBackpressure,
   BulkIngester,
+  BULK_CHUNK_SIZE,
   INVALID_ROW_ERROR_REASON,
   INVALID_ROW_ERROR_TYPE,
 } from '../utils/bulk_ingest';
@@ -38,9 +39,9 @@ export class CSVProcessor implements IFileProcessor {
   }
 
   public async ingestText(text: string, options: IngestOptions) {
-    const { client, indexName, delimiter, lookupId, lookupField } = options;
+    const { client, indexName, delimiter, lookupId, lookupField, mapping } = options;
 
-    const ingester = new BulkIngester(client, indexName);
+    const ingester = new BulkIngester(client, indexName, BULK_CHUNK_SIZE, mapping);
     return await new Promise<IngestResponse>((resolve, reject) => {
       let totalRows = 0;
 
@@ -62,13 +63,13 @@ export class CSVProcessor implements IFileProcessor {
   }
 
   public async ingestFile(file: Readable, options: IngestOptions) {
-    const { client, indexName, delimiter, lookupId, lookupField } = options;
+    const { client, indexName, delimiter, lookupId, lookupField, mapping } = options;
 
     if (!!!options.delimiter) {
       throw new Error('Delimiter is required');
     }
 
-    const ingester = new BulkIngester(client, indexName);
+    const ingester = new BulkIngester(client, indexName, BULK_CHUNK_SIZE, mapping);
     return await new Promise<IngestResponse>((resolve, reject) => {
       let totalRows = 0;
 

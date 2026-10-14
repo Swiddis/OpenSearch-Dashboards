@@ -138,6 +138,20 @@ describe('NDJSONProcessor', () => {
       }
     );
 
+    it('should stringify numbers going into keyword fields, leaving a mixed column consistent', async () => {
+      const response = await processor.ingestFile(
+        Readable.from(['{"code": 123}', '{"code": "N/A"}', '{"code": 4.5}'].join('\n')),
+        {
+          client: clientMock,
+          indexName: 'foo',
+          mapping: { properties: { code: { type: 'keyword' } } },
+        }
+      );
+
+      expect(response.failedRows).toEqual([]);
+      expect(bulkDocs(clientMock)).toEqual([{ code: '123' }, { code: 'N/A' }, { code: '4.5' }]);
+    });
+
     it('should report documents with empty fields as invalid_row without sending them', async () => {
       const response = await processor.ingestFile(
         Readable.from(['{"a": 1}', '{"": 2}', '{"b": 3}'].join('\n')),
