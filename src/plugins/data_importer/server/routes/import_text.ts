@@ -160,39 +160,53 @@ export function importTextRoute(
           lookupField: LOOKUP_FIELD,
         });
 
-        // Create filtered alias if import identifier is provided
-        if (request.query.importIdentifier && lookupId && message.failedRows.length < 1) {
-          try {
-            await client.indices.updateAliases({
-              body: {
-                actions: [
-                  {
-                    add: {
-                      index: request.query.indexName,
-                      alias: request.query.importIdentifier,
-                      filter: {
-                        term: {
-                          [LOOKUP_FIELD]: lookupId,
+        const indexedCount = message.total - message.failedRows.length;
+        const success = message.failedRows.length < 1;
+        // Some rows landed and some did not: the UI should warn with message.errorSummary
+        const partial = indexedCount > 0 && !success;
+
+        // Create the filtered alias whenever ANY rows landed. On partial failure the landed rows
+        // already carry the __lookup uuid; skipping the alias would orphan them on the (shared)
+        // index with no way to address or clean them up.
+        let aliasCreated: boolean | undefined;
+        if (request.query.importIdentifier && lookupId) {
+          aliasCreated = false;
+          if (indexedCount > 0) {
+            try {
+              await client.indices.updateAliases({
+                body: {
+                  actions: [
+                    {
+                      add: {
+                        index: request.query.indexName,
+                        alias: request.query.importIdentifier,
+                        filter: {
+                          term: {
+                            [LOOKUP_FIELD]: lookupId,
+                          },
                         },
                       },
                     },
-                  },
-                ],
-              },
-            });
-          } catch (aliasError) {
-            // Log error but don't fail the import
-            // @ts-expect-error TS2339 TODO(ts-error): fixme
-            context.dataImporter?.logger.error(
-              `Failed to create alias ${request.query.importIdentifier}: ${aliasError}`
-            );
+                  ],
+                },
+              });
+              aliasCreated = true;
+            } catch (aliasError) {
+              // Log error but don't fail the import; aliasCreated=false tells the client
+              // @ts-expect-error TS2339 TODO(ts-error): fixme
+              context.dataImporter?.logger.error(
+                `Failed to create alias ${request.query.importIdentifier}: ${aliasError}`
+              );
+            }
           }
         }
 
         return response.ok({
           body: {
             message,
-            success: message.failedRows.length < 1,
+            success,
+            partial,
+            ...(aliasCreated !== undefined && { aliasCreated }),
           },
         });
       } catch (e) {

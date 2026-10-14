@@ -5,8 +5,20 @@
 
 import { parseStream, parseString } from 'fast-csv';
 import { Readable } from 'stream';
-import { IFileProcessor, IngestOptions, ParseOptions, ValidationOptions } from '../types';
+import {
+  IFileProcessor,
+  IngestOptions,
+  IngestResponse,
+  ParseOptions,
+  ValidationOptions,
+} from '../types';
 import { isValidObject } from '../utils/util';
+import {
+  applyBackpressure,
+  BulkIngester,
+  INVALID_ROW_ERROR_REASON,
+  INVALID_ROW_ERROR_TYPE,
+} from '../utils/bulk_ingest';
 
 export class CSVProcessor implements IFileProcessor {
   public async validateText(text: string, options: ValidationOptions) {
@@ -28,43 +40,25 @@ export class CSVProcessor implements IFileProcessor {
   public async ingestText(text: string, options: IngestOptions) {
     const { client, indexName, delimiter, lookupId, lookupField } = options;
 
-    const failedRows: number[] = [];
-    const numDocuments = await new Promise<number>((resolve, reject) => {
-      const tasks: Array<Promise<void>> = [];
+    const ingester = new BulkIngester(client, indexName);
+    return await new Promise<IngestResponse>((resolve, reject) => {
       let totalRows = 0;
 
-      parseString(text, { headers: true, delimiter })
-        .on('data', async (row) => {
-          const task = (async () => {
-            const curRow = ++totalRows;
-            try {
-              // Inject lookup field if provided
-              const document = lookupId && lookupField ? { ...row, [lookupField]: lookupId } : row;
-
-              await client.index({
-                index: indexName,
-                body: document,
-              });
-            } catch (_) {
-              failedRows.push(curRow);
-            }
-          })();
-          tasks.push(task);
+      const stream = parseString(text, { headers: true, delimiter });
+      stream
+        .on('data', (row) => {
+          const curRow = ++totalRows;
+          // Inject lookup field if provided
+          const document = lookupId && lookupField ? { ...row, [lookupField]: lookupId } : row;
+          applyBackpressure(stream, ingester.add(curRow, document));
         })
         .on('error', (e) =>
           reject(new Error(`Stopped processing after ${totalRows} rows due to: ${e}`))
         )
-        .on('end', async (rowCount: number) => {
-          await Promise.all(tasks);
-          resolve(rowCount);
+        .on('end', (rowCount: number) => {
+          ingester.finish(rowCount).then(resolve, reject);
         });
     });
-
-    return {
-      total: numDocuments,
-      message: `Indexed ${numDocuments - failedRows.length} documents`,
-      failedRows: failedRows.sort((n1, n2) => n1 - n2),
-    };
   }
 
   public async ingestFile(file: Readable, options: IngestOptions) {
@@ -74,48 +68,30 @@ export class CSVProcessor implements IFileProcessor {
       throw new Error('Delimiter is required');
     }
 
-    const failedRows: number[] = [];
-    const numDocuments = await new Promise<number>((resolve, reject) => {
-      const tasks: Array<Promise<void>> = [];
+    const ingester = new BulkIngester(client, indexName);
+    return await new Promise<IngestResponse>((resolve, reject) => {
       let totalRows = 0;
 
-      parseStream(file, { headers: true, delimiter })
+      const stream = parseStream(file, { headers: true, delimiter });
+      stream
         .validate((row: Record<string, any>) => isValidObject(row))
         .on('data', (row) => {
-          const task = (async () => {
-            const curRow = ++totalRows;
-            try {
-              // Inject lookup field if provided
-              const document = lookupId && lookupField ? { ...row, [lookupField]: lookupId } : row;
-
-              await client.index({
-                index: indexName,
-                body: document,
-              });
-            } catch (_) {
-              failedRows.push(curRow);
-            }
-          })();
-          tasks.push(task);
+          const curRow = ++totalRows;
+          // Inject lookup field if provided
+          const document = lookupId && lookupField ? { ...row, [lookupField]: lookupId } : row;
+          applyBackpressure(stream, ingester.add(curRow, document));
         })
         .on('data-invalid', (_, rowCount: number) => {
           totalRows++;
-          failedRows.push(rowCount);
+          ingester.addFailure(rowCount, INVALID_ROW_ERROR_TYPE, INVALID_ROW_ERROR_REASON);
         })
         .on('error', (e) =>
           reject(new Error(`Stopped processing after ${totalRows} rows due to: ${e}`))
         )
-        .on('end', async (rowCount: number) => {
-          await Promise.all(tasks);
-          resolve(rowCount);
+        .on('end', (rowCount: number) => {
+          ingester.finish(rowCount).then(resolve, reject);
         });
     });
-
-    return {
-      total: numDocuments,
-      message: `Indexed ${numDocuments - failedRows.length} documents`,
-      failedRows: failedRows.sort((n1, n2) => n1 - n2),
-    };
   }
 
   public async parseFile(file: Readable, limit: number, options: ParseOptions) {

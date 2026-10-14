@@ -50,6 +50,31 @@ export interface IngestOptions {
   lookupField?: string;
 }
 
+/**
+ * One bucket of failures that share a cause, e.g. 25,900 rows failing with
+ * `mapper_parsing_exception: failed to parse field [age] of type [integer]`.
+ */
+export interface IngestErrorSummary {
+  /**
+   * OpenSearch error type (e.g. `mapper_parsing_exception`), or an importer-local type such as
+   * `invalid_row` for rows rejected before being sent to OpenSearch
+   */
+  type: string;
+  /**
+   * Error reason with per-document detail (doc ids, value previews) stripped so that rows failing
+   * for the same cause are grouped together
+   */
+  reason: string;
+  /**
+   * Number of rows that failed with this type + reason
+   */
+  count: number;
+  /**
+   * A few example row numbers (ascending) for this bucket
+   */
+  sampleRows: number[];
+}
+
 export interface IngestResponse {
   /**
    * Total count of documents in file successfully or unsuccessfully parsed/ingested
@@ -57,9 +82,15 @@ export interface IngestResponse {
   total: number;
   message: string;
   /**
-   * List of row numbers that failed to be parsed/ingested
+   * Full list of row numbers that failed to be parsed/ingested
    */
   failedRows: number[];
+  /**
+   * Top failure causes, most frequent first (capped to a handful of buckets). Prefer this over
+   * `failedRows` for user-facing messages. Built-in processors always populate it; optional so
+   * that externally registered processors remain compatible.
+   */
+  errorSummary?: IngestErrorSummary[];
 }
 
 export interface ValidationOptions {
