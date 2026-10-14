@@ -181,7 +181,8 @@ describe('useDisplayedColumns', () => {
         mockFilteredColumns,
         mockDataset,
         false,
-        false
+        false,
+        true
       );
 
       expect(result.current).toEqual(mockDisplayedColumns);
@@ -219,7 +220,8 @@ describe('useDisplayedColumns', () => {
         ['@timestamp', '_source'], // Should include _source
         mockDataset,
         false,
-        false
+        false,
+        true
       );
     });
   });

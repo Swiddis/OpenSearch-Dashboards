@@ -93,8 +93,24 @@ export const processDisplayedColumns = (
     );
   }
 
-  // Step 2: Handle edge case where only time field remains
-  if (filteredColumns.length === 1 && filteredColumns[0] === dataset?.timeFieldName) {
+  // Whether the dataset's time field actually appears in the result set. When we have processed
+  // results, trust their field counts: a time-based dataset queried via `source=<lookup>` returns
+  // rows without the time field, so it won't appear in fieldCounts. With no processed results
+  // (fieldCounts not requested), assume present to preserve legacy behavior.
+  const timeFieldName = dataset?.timeFieldName as string | undefined;
+  const timeFieldPresent =
+    !timeFieldName || !processedResults?.fieldCounts
+      ? true
+      : (processedResults.fieldCounts[timeFieldName] ?? 0) > 0;
+
+  // Step 2: Handle edge case where only time field remains — but only when the time field is
+  // actually in the data. For a lookup query the time field is absent, so this fallback must not
+  // fire (it would re-introduce the phantom time column via a lone-timeField assumption).
+  if (
+    timeFieldPresent &&
+    filteredColumns.length === 1 &&
+    filteredColumns[0] === dataset?.timeFieldName
+  ) {
     filteredColumns = [...filteredColumns, '_source'];
   }
 
@@ -103,7 +119,8 @@ export const processDisplayedColumns = (
     filteredColumns,
     dataset,
     uiSettings.get(UI_SETTINGS.SHORT_DOTS_ENABLE),
-    uiSettings.get(DOC_HIDE_TIME_COLUMN_SETTING)
+    uiSettings.get(DOC_HIDE_TIME_COLUMN_SETTING),
+    timeFieldPresent
   );
 };
 
