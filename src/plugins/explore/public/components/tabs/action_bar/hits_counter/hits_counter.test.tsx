@@ -90,6 +90,16 @@ describe('hits counter', () => {
     expect(hits.text()).toBe(props.hits?.toString());
   });
 
+  it('renders the outside-dataset badge when isQueryingOutsideDataset is true', () => {
+    component = mountWithIntl(<HitsCounter {...props} isQueryingOutsideDataset={true} />);
+    expect(findTestSubject(component, 'exploreQueryingOutsideDataset').length).toBeGreaterThan(0);
+  });
+
+  it('does not render the outside-dataset badge by default', () => {
+    component = mountWithIntl(<HitsCounter {...props} />);
+    expect(findTestSubject(component, 'exploreQueryingOutsideDataset').length).toBe(0);
+  });
+
   it('renders a sub-second duration in milliseconds', () => {
     component = mountWithIntl(<HitsCounter {...props} />);
     const elapsedMs = findTestSubject(component, 'discoverQueryElapsedMs');

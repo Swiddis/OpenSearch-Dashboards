@@ -23,9 +23,11 @@ const mockSetShowRawTable = jest.fn();
 // The count comes from the results cache and dataset context, neither of which this mock store
 // carries; the action bar's job here is only to pass it through to the hits counter.
 const mockUseHiddenColumnCount = jest.fn(() => 0);
+const mockUseQueryingOutsideDataset = jest.fn(() => false);
 jest.mock('../../../../helpers/use_displayed_columns', () => ({
   ...jest.requireActual('../../../../helpers/use_displayed_columns'),
   useHiddenColumnCount: () => mockUseHiddenColumnCount(),
+  useQueryingOutsideDataset: () => mockUseQueryingOutsideDataset(),
 }));
 
 jest.mock('../download_csv', () => ({

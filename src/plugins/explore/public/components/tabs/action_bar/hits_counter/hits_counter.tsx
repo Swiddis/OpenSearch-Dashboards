@@ -30,7 +30,15 @@
 
 import './hits_counter.scss';
 
-import { EuiButtonEmpty, EuiFlexGroup, EuiFlexItem, EuiLink, EuiText } from '@elastic/eui';
+import {
+  EuiBadge,
+  EuiButtonEmpty,
+  EuiFlexGroup,
+  EuiFlexItem,
+  EuiLink,
+  EuiText,
+  EuiToolTip,
+} from '@elastic/eui';
 import { FormattedMessage, I18nProvider } from '@osd/i18n/react';
 import { i18n } from '@osd/i18n';
 import { OpenSearchSearchHit } from '../../../../types/doc_views_types';
@@ -73,6 +81,12 @@ export interface HitsCounterProps {
    * turns the setting off, so the hidden columns come back
    */
   onShowHiddenColumns?: () => void;
+  /**
+   * when true, the result rows came from a different source than the active dataset (e.g. a
+   * `source=<lookup>` query over a time-based dataset); renders an informational badge so the
+   * user understands why time-dependent features (histogram, time column) are quiet
+   */
+  isQueryingOutsideDataset?: boolean;
 }
 
 export function HitsCounter({
@@ -85,6 +99,7 @@ export function HitsCounter({
   rowsCountOverride,
   hiddenColumnCount = 0,
   onShowHiddenColumns,
+  isQueryingOutsideDataset = false,
 }: HitsCounterProps) {
   const rowsCount = rowsCountOverride !== undefined ? rowsCountOverride : rows?.length || 0;
   const duration = formatDuration(elapsedMs);
@@ -160,6 +175,29 @@ export function HitsCounter({
         {/* Sits in the same sentence as the counts so the table's column set is disclosed where
             the result summary already is, and offers the way back out of the filter. The gap is a
             margin rather than a leading space, since the row's gutterSize="none" collapses one. */}
+        {isQueryingOutsideDataset && (
+          <EuiFlexItem grow={false}>
+            <EuiToolTip
+              position="top"
+              content={i18n.translate('explore.discover.outsideDatasetBadgeTooltip', {
+                defaultMessage:
+                  'These results come from an index other than the current dataset. Time-based features (histogram, time column, time filter) are unavailable for this query.',
+              })}
+            >
+              <EuiBadge
+                color="warning"
+                iconType="iInCircle"
+                className="dscResultCount__outsideDataset"
+                data-test-subj="exploreQueryingOutsideDataset"
+              >
+                <FormattedMessage
+                  id="explore.discover.outsideDatasetBadge"
+                  defaultMessage="Querying outside current dataset"
+                />
+              </EuiBadge>
+            </EuiToolTip>
+          </EuiFlexItem>
+        )}
         {hiddenColumnCount > 0 && (
           <EuiFlexItem grow={false}>
             <EuiText size="xs" color="subdued" className="dscResultCount__hiddenColumns">

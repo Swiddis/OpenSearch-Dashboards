@@ -235,3 +235,36 @@ export const useHiddenColumnCount = (): number => {
     return Math.max(0, all - shown);
   }, [columns, dataset, uiSettings, processedResults, hideEmptyFields]);
 };
+
+/**
+ * Whether the current result set appears to come from somewhere other than the active dataset —
+ * the case where a user types `source=<other index>` (e.g. a lookup) while a time-based dataset
+ * is selected. Detected the same way the Time column drop is: the dataset declares a time field,
+ * but it's absent from the returned rows' field counts.
+ *
+ * Returns false when there's nothing to judge from (no results yet, or a dataset with no time
+ * field), so callers can treat it as "querying within the dataset" by default.
+ */
+export const useQueryingOutsideDataset = (): boolean => {
+  const { dataset } = useDatasetContext();
+
+  const query = useSelector((state: RootState) => state.query);
+  const cacheKey = useMemo(() => defaultPrepareQueryString(query), [query]);
+  const metadata = useSelector((state: RootState) => state.results[cacheKey]);
+  const processedResults = useMemo(() => {
+    if (!metadata) return null;
+    const rawResults = resultsCache.get(cacheKey);
+    return rawResults && dataset ? defaultResultsProcessor(rawResults, dataset) : null;
+  }, [metadata, cacheKey, dataset]);
+
+  return useMemo(() => {
+    const timeFieldName = dataset?.timeFieldName as string | undefined;
+    // Need a time-based dataset and a populated result set to make the call.
+    if (!timeFieldName || !processedResults?.fieldCounts) return false;
+    const hasRows = (processedResults.hits?.hits?.length ?? 0) > 0;
+    if (!hasRows) return false;
+    // Dataset has a time field, results have rows, but none carry that time field → the rows came
+    // from a different source than the dataset.
+    return (processedResults.fieldCounts[timeFieldName] ?? 0) === 0;
+  }, [dataset, processedResults]);
+};
