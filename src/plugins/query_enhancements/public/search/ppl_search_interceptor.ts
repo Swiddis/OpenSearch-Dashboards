@@ -39,6 +39,25 @@ import { PPLFilterUtils } from './filters';
 
 export const DEFAULT_PPL_ASYNC_HEAD_SIZE = 10000;
 
+// [U5 POC] Pull the index named after `source=` out of a PPL query, stripped of backticks/quotes.
+// Returns undefined if we can't find one. POC-only, intentionally dumb (first source= token).
+const pocExtractSourceIndex = (queryString: string): string | undefined => {
+  const m = /\bsource\s*=\s*([`'"]?)([^\s`'"|,]+)\1/i.exec(queryString);
+  return m?.[2];
+};
+
+// [U5 POC] True when the query's source= clearly names a different index than the selected dataset.
+// When that happens, the dataset's time field almost certainly doesn't exist on the queried index,
+// so we skip time injection to get past "field <timeField> not found" and see what else breaks.
+const pocSourceDiffersFromDataset = (query: Query): boolean => {
+  const src = pocExtractSourceIndex(query.query ?? '');
+  const datasetTitle = query.dataset?.title;
+  if (!src || !datasetTitle) return false;
+  // Compare case-insensitively; ignore a trailing wildcard on the dataset (e.g. request_logs*).
+  const norm = (s: string) => s.toLowerCase().replace(/\*$/, '');
+  return norm(src) !== norm(datasetTitle);
+};
+
 // Commands after which `sort - <dataset time field>` must not be appended: the user already ordered
 // or limited the result, or the command replaced the row type. chart and timechart emit a time
 // column of their own naming (`@timestamp`, or chart's `over` argument), so sorting on the dataset's
@@ -188,6 +207,9 @@ export class PPLSearchInterceptor extends SearchInterceptor {
       dataset &&
       dataset.timeFieldName &&
       !skipTimeFilter && // Skip time filters if skipTimeFilter is true
+      // [U5 POC] Skip time filter when source= names a different index than the dataset — its
+      // time field won't exist there. Removing this reverts to the always-inject behavior.
+      !pocSourceDiffersFromDataset(query) &&
       // Skip adding time filters if hideDatePicker is false. Let search strategy insert time filters.
       datasetService.getType(dataset.type)?.languageOverrides?.PPL?.hideDatePicker !== false
     ) {
@@ -239,6 +261,8 @@ export class PPLSearchInterceptor extends SearchInterceptor {
     if (
       !isPPLSearchQuery(query) ||
       !query.dataset?.timeFieldName ||
+      // [U5 POC] Don't sort on the dataset time field when querying a different source.
+      pocSourceDiffersFromDataset(query) ||
       !canAppendDefaultSort(query.query)
     ) {
       return query;

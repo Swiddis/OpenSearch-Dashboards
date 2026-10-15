@@ -185,7 +185,7 @@ export function HitsCounter({
               })}
             >
               <EuiBadge
-                color="warning"
+                color="hollow"
                 iconType="iInCircle"
                 className="dscResultCount__outsideDataset"
                 data-test-subj="exploreQueryingOutsideDataset"
