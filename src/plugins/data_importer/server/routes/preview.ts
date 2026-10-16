@@ -8,7 +8,7 @@ import { schema, TypeOf } from '@osd/config-schema';
 import { FileProcessorService } from '../processors/file_processor_service';
 import { configSchema } from '../../config';
 import { CSV_SUPPORTED_DELIMITERS } from '../../common/constants';
-import { decideClient, fetchDepthLimit } from '../utils/util';
+import { decideClient, checkIndexExists, fetchDepthLimit } from '../utils/util';
 import { FileStream } from '../types';
 import { determineMappingFromDocuments } from '../utils/determine_mapping';
 
@@ -71,18 +71,16 @@ export function previewRoute(
 
       if (!request.query.createMode) {
         try {
-          const indexExists = await client.indices.exists({
-            index: request.query.indexName,
-          });
+          const indexExists = await checkIndexExists(client, request.query.indexName);
 
-          if (!indexExists.body) {
+          if (!indexExists) {
             return response.notFound({
               body: `Index ${request.query.indexName} does not exist`,
             });
           }
         } catch (e) {
           return response.internalError({
-            body: `Error checking if index exists: ${e}`,
+            body: `Error checking if index exists: ${e.message || e}`,
           });
         }
       }

@@ -10,7 +10,12 @@ import { FileProcessorService } from '../processors/file_processor_service';
 import { CSV_SUPPORTED_DELIMITERS } from '../../common/constants';
 import { IRouter } from '../../../../core/server';
 import { configSchema } from '../../config';
-import { decideClient, ALPHANUMERIC_REGEX_STRING, LOOKUP_FIELD } from '../utils/util';
+import {
+  decideClient,
+  checkIndexExists,
+  ALPHANUMERIC_REGEX_STRING,
+  LOOKUP_FIELD,
+} from '../utils/util';
 import { fetchIndexMapping } from '../utils/coerce_to_mapping';
 
 export function importTextRoute(
@@ -76,23 +81,21 @@ export function importTextRoute(
       }
 
       try {
-        const indexExists = await client.indices.exists({
-          index: request.query.indexName,
-        });
+        const indexExists = await checkIndexExists(client, request.query.indexName);
 
-        if (!request.query.createMode && !indexExists.body) {
+        if (!request.query.createMode && !indexExists) {
           return response.notFound({
             body: `Index ${request.query.indexName} does not exist`,
           });
         }
-        if (request.query.createMode && indexExists.body) {
+        if (request.query.createMode && indexExists) {
           return response.badRequest({
             body: `Index ${request.query.indexName} already exists`,
           });
         }
       } catch (e) {
         return response.internalError({
-          body: `Error checking if index exists: ${e}`,
+          body: `Error checking if index exists: ${e.message || e}`,
         });
       }
 

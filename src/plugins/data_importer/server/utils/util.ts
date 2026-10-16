@@ -21,6 +21,41 @@ export const decideClient = async (
     : context.core.opensearch.client.asCurrentUser;
 };
 
+/**
+ * Extracts an HTTP status code from an OpenSearch client error, if present.
+ * The OpenSearch JS client throws `ResponseError` which carries `statusCode`
+ * directly and under `meta.statusCode`.
+ */
+export const getErrorStatusCode = (e: any): number | undefined => {
+  return e?.statusCode ?? e?.meta?.statusCode;
+};
+
+/**
+ * Wraps `client.indices.exists`, translating an authorization failure into an
+ * actionable message. The exists API is a HEAD request, so a 403 from the
+ * security plugin comes back with an EMPTY body: stringifying the raw error
+ * yields `""`, which is the confusing `Error checking if index exists: ""`
+ * users hit when their role lacks `indices:admin/get` on the target index.
+ */
+export const checkIndexExists = async (
+  client: OpenSearchClient,
+  indexName: string
+): Promise<boolean> => {
+  try {
+    const indexExists = await client.indices.exists({ index: indexName });
+    return indexExists.body;
+  } catch (e) {
+    if (getErrorStatusCode(e) === 403) {
+      throw new Error(
+        `You do not have permission to access index "${indexName}". ` +
+          `Importing requires permission to create and read the target index ` +
+          `(for example the "indices:admin/get" and index create actions).`
+      );
+    }
+    throw e;
+  }
+};
+
 export const validateFileTypes = (fileTypes: string[], fileProcessors: FileProcessorService) => {
   const nonRegisteredFileTypes = fileTypes.filter(
     (fileType) => !fileProcessors.hasFileProcessorBeenRegistered(fileType)
