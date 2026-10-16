@@ -31,6 +31,20 @@ export const getErrorStatusCode = (e: any): number | undefined => {
 };
 
 /**
+ * Thrown by `checkIndexExists` when the current user lacks permission to
+ * access the target index. Carries `statusCode = 403` so route handlers can
+ * respond with `forbidden` rather than mislabeling a permission denial as a
+ * server fault (`internalError`/500).
+ */
+export class IndexAccessForbiddenError extends Error {
+  public readonly statusCode = 403;
+  constructor(message: string) {
+    super(message);
+    this.name = 'IndexAccessForbiddenError';
+  }
+}
+
+/**
  * Wraps `client.indices.exists`, translating an authorization failure into an
  * actionable message. The exists API is a HEAD request, so a 403 from the
  * security plugin comes back with an EMPTY body: stringifying the raw error
@@ -46,7 +60,7 @@ export const checkIndexExists = async (
     return indexExists.body;
   } catch (e) {
     if (getErrorStatusCode(e) === 403) {
-      throw new Error(
+      throw new IndexAccessForbiddenError(
         `You do not have permission to access index "${indexName}". ` +
           `Importing requires permission to create and read the target index ` +
           `(for example the "indices:admin/get" and index create actions).`

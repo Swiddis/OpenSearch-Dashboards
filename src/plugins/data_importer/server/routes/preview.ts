@@ -8,7 +8,12 @@ import { schema, TypeOf } from '@osd/config-schema';
 import { FileProcessorService } from '../processors/file_processor_service';
 import { configSchema } from '../../config';
 import { CSV_SUPPORTED_DELIMITERS } from '../../common/constants';
-import { decideClient, checkIndexExists, fetchDepthLimit } from '../utils/util';
+import {
+  decideClient,
+  checkIndexExists,
+  IndexAccessForbiddenError,
+  fetchDepthLimit,
+} from '../utils/util';
 import { FileStream } from '../types';
 import { determineMappingFromDocuments } from '../utils/determine_mapping';
 
@@ -79,6 +84,9 @@ export function previewRoute(
             });
           }
         } catch (e) {
+          if (e instanceof IndexAccessForbiddenError) {
+            return response.forbidden({ body: e.message });
+          }
           return response.internalError({
             body: `Error checking if index exists: ${e.message || e}`,
           });

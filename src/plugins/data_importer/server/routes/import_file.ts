@@ -13,6 +13,7 @@ import { configSchema } from '../../config';
 import {
   decideClient,
   checkIndexExists,
+  IndexAccessForbiddenError,
   ALPHANUMERIC_REGEX_STRING,
   LOOKUP_FIELD,
 } from '../utils/util';
@@ -100,6 +101,9 @@ export function importFileRoute(
           });
         }
       } catch (e) {
+        if (e instanceof IndexAccessForbiddenError) {
+          return response.forbidden({ body: e.message });
+        }
         return response.internalError({
           body: `Error checking if index exists: ${e.message || e}`,
         });

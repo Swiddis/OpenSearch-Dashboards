@@ -7,6 +7,7 @@ import {
   decideClient,
   checkIndexExists,
   getErrorStatusCode,
+  IndexAccessForbiddenError,
   fetchDepthLimit,
   isValidObject,
   validateFileTypes,
@@ -104,6 +105,16 @@ describe('util', () => {
       await expect(checkIndexExists(client, 'lookup_hosts')).rejects.toThrow(
         /do not have permission to access index "lookup_hosts"/
       );
+    });
+
+    it('throws a 403-carrying IndexAccessForbiddenError so routes can respond forbidden', async () => {
+      const client = makeClient(jest.fn().mockRejectedValue({ statusCode: 403 }));
+      await expect(checkIndexExists(client, 'lookup_hosts')).rejects.toBeInstanceOf(
+        IndexAccessForbiddenError
+      );
+      await checkIndexExists(client, 'lookup_hosts').catch((e) => {
+        expect(e.statusCode).toBe(403);
+      });
     });
 
     it('translates a 403 reported under meta.statusCode', async () => {
